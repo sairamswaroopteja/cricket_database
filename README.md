@@ -1,4 +1,63 @@
-#Cricket_Database
+# 🏏 Cricinfo a cricket Web Application
+
+A full-stack web application that showcases structured cricket data including rankings, player stats, team information, and match schedules. The system supports secure user authentication, automated email notifications, and a MySQL-backed REST API for dynamic data rendering.
+
+---
+
+## 📌 Features
+
+- 📊 **Dedicated Pages**: For teams, players, and series with detailed statistics and filters
+- 🏆 **Rankings Across Formats**: Supports Test, ODI, and T20 player and team rankings
+- 📅 **Match Schedule Viewer**: Users can explore match schedules by series or tournaments
+- 🔐 **User Authentication**:
+  - Manual login/signup system
+  - Google OAuth Sign-In
+- 📧 **Email Workflows**:
+  - Login confirmation
+  - Subscription/payment confirmation
+- 🧾 **REST API Endpoints**:
+  - Rankings, players by team, series/tournaments, match schedule, etc.
+
+---
+
+## 🧱 Tech Stack
+
+| Layer         | Technology                                    |
+|---------------|-----------------------------------------------|
+| **Frontend**  | HTML, CSS, JavaScript                         |
+| **Backend**   | Node.js, Express                              |
+| **Database**  | MySQL (normalized schema, manually curated)   |
+| **Email**     | Nodemailer (Gmail SMTP)                       |
+| **Auth**      | Google OAuth + Manual Login                   |
+
+---
+
+## 🛠️ Project Setup
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/sairamswaroopteja/cricket_database.git
+cd cricket_database
+```
+### 2. Folder Structure
+cricket_database/
+│
+├── client/             # Frontend (HTML, CSS, JS)
+│   ├── index.html
+│   ├── rankings.html
+│   └── ... (other pages)
+│
+├── server/             # Backend code (Node.js + Express)
+│   ├── server.js
+│   ├── .env
+│   ├── package.json
+│   └── ...
+
+### 3. Install Backend Dependencies
+cd server
+npm install
+
+
 
 ##  Homepage
 ![Screenshot 2025-07-01 093541](https://github.com/user-attachments/assets/ec727d5f-3d82-484f-9785-f6897ce4b233)
