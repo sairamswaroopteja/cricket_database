@@ -21,7 +21,7 @@
 ##login_and_signup_options_and_confirmation
 ![Screenshot 2025-07-01 094050](https://github.com/user-attachments/assets/8afb2862-d2ff-44f9-a776-7a1a001158a4)
 ![Screenshot 2025-07-01 094111](https://github.com/user-attachments/assets/dd2f277c-c4dd-4faf-b679-38451aca7828)
-![Screenshot 2025-07-01 094426](https://github.com/user-attachments/assets/3d6e562a-2f24-4328-92ae-8043a5bf0f76)
+![Screenshot 2025-07-01 094407](https://github.com/user-attachments/assets/07d36ffc-ad34-4e9b-82f9-94ddbea26c22)
 
 ##Profile_and_subscription_plans
 ![Screenshot 2025-07-01 094128](https://github.com/user-attachments/assets/a1a5590e-9a36-4e5f-a525-736742d3598f)
@@ -29,5 +29,7 @@
 
 ##Payment_details_and_confirmation
 ![Screenshot 2025-07-01 094221](https://github.com/user-attachments/assets/5b6d144d-536c-4f96-a12f-5c5e43f602a6)
-![Screenshot 2025-07-01 094407](https://github.com/user-attachments/assets/07d36ffc-ad34-4e9b-82f9-94ddbea26c22)
+![Screenshot 2025-07-01 094426](https://github.com/user-attachments/assets/f25a1917-a272-4071-8406-c175345e9be0)
+
+
 
