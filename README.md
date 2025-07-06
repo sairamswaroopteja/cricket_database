@@ -2,7 +2,7 @@
 
 A full-stack web application that showcases structured cricket data including rankings, player stats, team information, and match schedules. The system supports secure user authentication, automated email notifications, and a MySQL-backed REST API for dynamic data rendering.
 
----
+--- 
 
 ## 📌 Features
 
