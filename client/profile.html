@@ -51,7 +51,9 @@
                     <li>
                         <button id="sign-out">Sign Out</button>
                     </li>
-                    <li><a href="#" style="color: red;">Delete Account</a></li>
+                    <li>
+                        <button id="delete-account" class="delete-btn" style="color: red;">Delete Account</button>
+                    </li>
                 </ul>
             </div>
     
@@ -72,6 +74,8 @@
     </footer>
 
     <script>
+        const API_BASE = 'http://localhost:3000';
+
         window.onload = function () {
             const username = localStorage.getItem('username');
             const email = localStorage.getItem('email');
@@ -89,6 +93,67 @@
         document.getElementById('sign-out').addEventListener('click', function () {
             localStorage.clear(); // Clear all user data from localStorage
             window.location.href = 'index.html'; // Redirect to the home page
+        });
+
+        // Handle Delete Account functionality
+        document.getElementById('delete-account').addEventListener('click', async function (e) {
+            e.preventDefault();
+
+            const email = localStorage.getItem('email');
+            if (!email) {
+                alert('No active user session found. Please log in again.');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const confirmFirst = confirm('Are you sure you want to delete your account? This action cannot be undone.');
+            if (!confirmFirst) {
+                return;
+            }
+
+            try {
+                const response = await fetch(API_BASE + '/delete-account', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email: email })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(data.message || 'Account deleted successfully.');
+                    localStorage.clear();
+                    window.location.href = 'index.html';
+                } else if (response.status === 400 && data.hasActiveSubscriptions) {
+                    const confirmForce = confirm(
+                        data.message + '\n\nDo you want to cancel your subscriptions and permanently delete your account?'
+                    );
+                    if (confirmForce) {
+                        const forceResponse = await fetch(API_BASE + '/delete-account', {
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ email: email, force: true })
+                        });
+                        const forceData = await forceResponse.json();
+                        if (forceResponse.ok) {
+                            alert(forceData.message || 'Account deleted successfully.');
+                            localStorage.clear();
+                            window.location.href = 'index.html';
+                        } else {
+                            alert(forceData.message || 'Failed to delete account.');
+                        }
+                    }
+                } else {
+                    alert(data.message || 'Failed to delete account.');
+                }
+            } catch (error) {
+                console.error('Error deleting account:', error);
+                alert('Cannot connect to server. Please ensure the backend is running on ' + API_BASE);
+            }
         });
     </script>
 </body>

@@ -534,9 +534,18 @@ padding: 10px;
         border-radius: 5px; /* Slightly rounded corners on hover */
     }
 
-    /* Sidebar specific delete account link */
-    .sidebar ul li a[style="color: red;"] {
-        color: red; /* Red for delete account */
+    /* Sidebar specific delete account link & button */
+    .sidebar ul li a[style="color: red;"],
+    .sidebar ul li button[style="color: red;"],
+    .sidebar ul li .delete-btn {
+        color: #e74c3c !important; /* Red for delete account */
+    }
+
+    .sidebar ul li a[style="color: red;"]:hover,
+    .sidebar ul li button[style="color: red;"]:hover,
+    .sidebar ul li .delete-btn:hover {
+        background-color: #c0392b !important;
+        color: white !important;
     }
 
     /* Styling for the details section */

@@ -1,10 +1,12 @@
 
+const path = require('path'); 
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 const express = require('express');
 const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
-const path = require('path'); 
+const nodemailer = require('nodemailer'); 
 
 const app = express();
 const PORT = 3000;
@@ -16,10 +18,10 @@ app.use(cors()); // To allow cross-origin requests (important for frontend to co
 
 // MySQL database setup
 const db = mysql.createConnection({
-    host: 'localhost', // Change if you're using a remote DB
-    user: 'root', // Your MySQL username
-    password: '123', // Your MySQL password
-    database: 'cricket' // The name of your database
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD !== undefined ? process.env.DB_PASSWORD : '', // MySQL password from .env
+    database: process.env.DB_NAME || 'cricket'
 });
 
 // Connect to the MySQL database
@@ -35,23 +37,42 @@ db.connect((err) => {
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'cse230001023@iiti.ac.in', // Sender's email address
-        pass: 'Mahi1307' // Your email password or App Password if 2FA is enabled
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD
     }
 });
 
+// Verify Nodemailer transporter configuration on startup
+if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+    transporter.verify((err, success) => {
+        if (err) {
+            console.error('⚠️ Nodemailer SMTP configuration error:', err.message);
+        } else {
+            console.log('✅ Nodemailer SMTP is ready to send emails.');
+        }
+    });
+} else {
+    console.warn('⚠️ Nodemailer warning: GMAIL_USER or GMAIL_APP_PASSWORD not set in .env. Login emails cannot be sent until configured.');
+}
+
 // Function to send login details email
-async function sendLoginEmail(userEmail, username) {
+async function sendLoginEmail(userEmail, username, method = 'Google') {
+    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+        console.warn('⚠️ Cannot send login email: GMAIL_USER or GMAIL_APP_PASSWORD is not configured in .env');
+        return;
+    }
+
     const mailOptions = {
-        from: '"CRICINFO" <cse230001023@iiti.ac.in>', // Sender address
+        from: '"CRICINFO" <' + process.env.GMAIL_USER + '>', // Sender address
         to: userEmail, // Receiver's email address
-        subject: 'Login Details', // Email subject
-        text: `Hello ${username},\n\nYou have successfully logged in with Google.\n\nThanks,\nCRICINFO Team` // Email content
+        subject: 'Login Notification - CRICINFO', // Email subject
+        text: `Hello ${username || 'User'},\n\nYou have successfully logged in to CRICINFO with ${method}.\n\nThanks,\nCRICINFO Team` // Email content
     };
 
     try {
         let info = await transporter.sendMail(mailOptions);
         console.log('Email sent: ' + info.response);
+        return info;
     } catch (error) {
         console.error('Error sending email: ', error);
         throw new Error('Failed to send email');
@@ -63,31 +84,46 @@ app.post('/google-login', (req, res) => {
     const { email, name } = req.body; // Data from Google login
     console.log('Google login data received:', email, name);
 
+    if (!email) {
+        return res.status(400).json({ message: 'Email is required' });
+    }
+
     db.query('SELECT * FROM users WHERE email = ?', [email], (err, result) => {
         if (err) {
             console.error('Database error:', err);
             return res.status(500).json({ message: 'Database error' });
         }
 
+        const proceedWithLogin = (userId) => {
+            const loginMethod = 'google';
+            db.query('INSERT INTO user_logins (user_id, login_method) VALUES (?, ?)', [userId, loginMethod], (logErr) => {
+                if (logErr) {
+                    console.error('Error logging user login:', logErr);
+                }
+
+                sendLoginEmail(email, name, 'Google')
+                    .catch((error) => console.error('Login confirmation email failed:', error.message))
+                    .finally(() => {
+                        if (!res.headersSent) {
+                            res.status(200).json({ message: 'Google login successful', username: name, email });
+                        }
+                    });
+            });
+        };
+
         if (result.length === 0) {
-            return res.status(400).json({ message: 'User not found' });
+            // Auto-register new user from Google login
+            const autoUsername = name || email.split('@')[0];
+            db.query('INSERT INTO users (email, username) VALUES (?, ?)', [email, autoUsername], (insertErr, insertResult) => {
+                if (insertErr) {
+                    console.error('Error auto-registering Google user:', insertErr);
+                    return res.status(500).json({ message: 'Database error registering Google user' });
+                }
+                proceedWithLogin(insertResult.insertId);
+            });
+        } else {
+            proceedWithLogin(result[0].id);
         }
-
-        const userId = result[0].id;
-        const loginMethod = 'google';
-        db.query('INSERT INTO user_logins (user_id, login_method) VALUES (?, ?)', [userId, loginMethod], (err) => {
-            if (err) {
-                console.error('Error logging user login:', err);
-                return res.status(500).json({ message: 'Error logging user login' });
-            }
-
-            sendLoginEmail(email, name)
-                .then(() => res.status(200).json({ message: 'Google login successful' }))
-                .catch((error) => {
-                    console.error('Email sending failed:', error);
-                    res.status(500).json({ message: 'Failed to send login email' });
-                });
-        });
     });
 });
 
@@ -95,18 +131,24 @@ app.post('/google-login', (req, res) => {
 app.post('/signup', (req, res) => {
     const { email, username, password } = req.body;
 
-    db.query('SELECT * FROM users WHERE email = ?', [email], (err, emailResult) => {
+    const checkUserQuery = 'SELECT * FROM users WHERE username = ? OR email = ?';
+    db.query(checkUserQuery, [username, email], (err, results) => {
         if (err) {
+            console.error('Database error checking user:', err);
             return res.status(500).json({ message: 'Database error' });
         }
 
-        if (emailResult.length > 0) {
-            return res.status(400).json({ message: 'Email is already registered' });
+        if (results.length > 0) {
+            const isEmailTaken = results.some(r => r.email === email);
+            return res.status(400).json({
+                message: isEmailTaken ? 'Email is already registered' : 'Username is already taken'
+            });
         }
 
         const query = 'INSERT INTO users (email, username, password) VALUES (?, ?, ?)';
-        db.query(query, [email, username, password], (err) => {
-            if (err) {
+        db.query(query, [email, username, password], (insertErr) => {
+            if (insertErr) {
+                console.error('Database error creating user:', insertErr);
                 return res.status(500).json({ message: 'Database error' });
             }
             res.status(201).json({ message: 'User registered successfully' });
@@ -120,6 +162,7 @@ app.post('/login', (req, res) => {
 
     db.query('SELECT * FROM users WHERE username = ? AND password = ?', [username, password], (err, result) => {
         if (err) {
+            console.error('Database error during login:', err);
             return res.status(500).json({ message: 'Database error' });
         }
 
@@ -127,28 +170,114 @@ app.post('/login', (req, res) => {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
+        const user = result[0];
+        // Record manual login in user_logins
+        db.query('INSERT INTO user_logins (user_id, login_method) VALUES (?, ?)', [user.id, 'manual'], (logErr) => {
+            if (logErr) {
+                console.error('Error logging user login:', logErr);
+            }
+        });
+
+        // Send login confirmation email if user has email address
+        if (user.email) {
+            sendLoginEmail(user.email, user.username, 'Password')
+                .catch((error) => console.error('Login confirmation email failed:', error.message));
+        }
+
         res.status(200).json({
             message: 'Login successful',
-            username: result[0].username,
-            email: result[0].email
+            username: user.username,
+            email: user.email
         });
     });
 });
 
 // DELETE Endpoint to Delete User Account
 app.delete('/delete-account', (req, res) => {
-    const { email } = req.body;
+    const { email, force } = req.body;
 
-    db.query('DELETE FROM users WHERE email = ?', [email], (err, result) => {
+    if (!email) {
+        return res.status(400).json({ message: 'Email is required' });
+    }
+
+    db.query('SELECT * FROM users WHERE email = ?', [email], (err, users) => {
         if (err) {
+            console.error('Database error finding user for deletion:', err);
             return res.status(500).json({ message: 'Database error' });
         }
 
-        if (result.affectedRows === 0) {
+        if (users.length === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        res.status(200).json({ message: 'Account deleted successfully' });
+        const userId = users[0].id;
+
+        // Check if user has active subscriptions
+        db.query('SELECT * FROM subscriptions WHERE user_id = ?', [userId], (subErr, subs) => {
+            if (subErr) {
+                console.error('Database error checking subscriptions:', subErr);
+                return res.status(500).json({ message: 'Database error' });
+            }
+
+            if (subs.length > 0 && !force) {
+                return res.status(400).json({
+                    message: 'Cannot delete user with active subscriptions',
+                    hasActiveSubscriptions: true
+                });
+            }
+
+            // Cleanup subscriptions and subscription logs if forced
+            const cleanupSubscriptions = (next) => {
+                if (subs.length > 0 && force) {
+                    db.query('DELETE FROM subscriptions_log WHERE user_id = ?', [userId], (logErr) => {
+                        if (logErr) console.error('Error deleting subscriptions_log:', logErr);
+                        db.query('DELETE FROM subscriptions WHERE user_id = ?', [userId], (delSubErr) => {
+                            if (delSubErr) {
+                                console.error('Error deleting subscriptions:', delSubErr);
+                                return next(delSubErr);
+                            }
+                            next(null);
+                        });
+                    });
+                } else {
+                    db.query('DELETE FROM subscriptions_log WHERE user_id = ?', [userId], (logErr) => {
+                        if (logErr) console.error('Error deleting subscriptions_log:', logErr);
+                        next(null);
+                    });
+                }
+            };
+
+            cleanupSubscriptions((cleanupErr) => {
+                if (cleanupErr) {
+                    return res.status(500).json({ message: 'Failed to clean up subscriptions' });
+                }
+
+                // Delete login history from user_logins to satisfy foreign key constraint
+                db.query('DELETE FROM user_logins WHERE user_id = ?', [userId], (loginErr) => {
+                    if (loginErr) {
+                        console.error('Error deleting user_logins records:', loginErr);
+                        return res.status(500).json({ message: 'Error deleting user login records' });
+                    }
+
+                    // Delete the user record from users table
+                    db.query('DELETE FROM users WHERE id = ?', [userId], (delUserErr, result) => {
+                        if (delUserErr) {
+                            console.error('Error deleting user:', delUserErr);
+                            if (delUserErr.sqlState === '45000' || delUserErr.message.includes('Cannot delete user')) {
+                                return res.status(400).json({
+                                    message: delUserErr.message,
+                                    hasActiveSubscriptions: true
+                                });
+                            }
+                            return res.status(500).json({ message: 'Database error deleting user' });
+                        }
+
+                        console.log(`Account deleted successfully for ${email} (ID: ${userId})`);
+                        res.status(200).json({ message: 'Account deleted successfully' });
+                    });
+                });
+            });
+        });
     });
 });
 
@@ -372,57 +501,13 @@ app.get('/api/rankings/teams/t20', (req, res) => {
     });
 });
 
-app.post('/signup', (req, res) => {
-    const { email, username, password } = req.body;
-    console.log('Received signup data:', { email, username, password });
 
-    const checkUserQuery = 'SELECT * FROM users WHERE username = ? OR email = ?';
-    db.query(checkUserQuery, [username, email], (err, results) => {
-        if (err) {
-            console.error('Error checking user:', err);
-            return res.status(500).json({ message: 'Internal server error' });
-        }
-
-        if (results.length > 0) {
-            return res.status(400).json({ message: 'Username or email already exists' });
-        }
-
-        const insertUserQuery = 'INSERT INTO users (email, username, password) VALUES (?, ?, ?)';
-        db.query(insertUserQuery, [email, username, password], (err, result) => {
-            if (err) {
-                console.error('Error inserting user:', err);
-                return res.status(500).json({ message: 'Error signing up' });
-            }
-            console.log('User inserted successfully:', result);
-            res.status(201).json({ message: 'Signup successful' });
-        });
-    });
-});
-
-app.post('/login', (req, res) => {
-    const { username, password } = req.body;
-    console.log('Received login data:', { username, password });
-
-    const loginQuery = 'SELECT * FROM users WHERE username = ? AND password = ?';
-    db.query(loginQuery, [username, password], (err, results) => {
-        if (err) {
-            console.error('Error during login:', err);
-            return res.status(500).json({ message: 'Internal server error' });
-        }
-
-        if (results.length > 0) {
-            console.log('Login successful for user:', username);
-            return res.status(200).json({ message: 'Login successful' });
-        } else {
-            return res.status(401).json({ message: 'Invalid username or password' });
-        }
-    });
-});
 
 // Function to send payment confirmation email
 async function sendPaymentConfirmationEmail(userEmail, cardholderName, amount, plan) {
+    const sender = process.env.GMAIL_USER || 'no-reply@cricinfo.com';
     const mailOptions = {
-        from: '"CRICINFO" <cse230001023@iiti.ac.in>',
+        from: `"CRICINFO" <${sender}>`,
         to: userEmail, // Sending email to the user email passed here
         subject: 'Payment Confirmation',
         text: `Dear ${cardholderName},\n\nThank you for subscribing to the ${plan} plan.\nAmount Paid: INR${amount}\n\nWe appreciate your support!\n\nBest regards,\nThe CRICINFO Team`

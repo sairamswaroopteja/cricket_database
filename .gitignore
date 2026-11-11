@@ -1,0 +1,30 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Keep example env
+!.env.example
+!server/.env.example
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor and IDE artifacts
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+tempCodeRunnerFile.js
+*/tempCodeRunnerFile.js
+
+# OS generated files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Cricinfo - Login or Sign Up</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Page layout: lets the footer stick to the bottom */
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Auth Container */
+        .auth-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2em 1em;
+        }
+
+        .auth-option, .auth-form {
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #2C3E50;
+            padding: 2em;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            width: 100%;
+            max-width: 340px;
+            box-sizing: border-box;
+            display: none; /* Hidden by default */
+        }
+
+        /* Ensure the visible section displays */
+        #auth-option { display: block; }
+
+        .auth-option h3, .auth-form h3 {
+            margin: 0 0 0.5em;
+            font-size: 1.8em;
+            color: #2C3E50;
+        }
+
+        .auth-option button, .auth-form button.primary {
+            width: 100%;
+            padding: 0.8em;
+            background-color: #2980B9;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-top: 1em;
+        }
+        .auth-option button:hover, .auth-form button.primary:hover { background-color: #3498DB; }
+        .auth-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .auth-form .link-btn {
+            background: none;
+            border: none;
+            color: #2980B9;
+            cursor: pointer;
+            margin-top: 1em;
+            font-size: 0.95em;
+            text-decoration: underline;
+        }
+
+        .auth-form input[type="text"],
+        .auth-form input[type="password"],
+        .auth-form input[type="email"] {
+            width: 100%;
+            padding: 0.8em;
+            margin: 0.5em 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        /* Inline status message (replaces alert popups) */
+        .auth-message {
+            display: none;
+            width: 100%;
+            max-width: 340px;
+            box-sizing: border-box;
+            margin-bottom: 1em;
+            padding: 0.8em 1em;
+            border-radius: 5px;
+            font-size: 0.95em;
+            text-align: center;
+        }
+        .auth-message.error   { background: #FDEDEC; color: #922B21; border: 1px solid #F5B7B1; }
+        .auth-message.success { background: #EAFAF1; color: #1E8449; border: 1px solid #A9DFBF; }
+
+        /* Google Sign-In Button */
+        .google-signin {
+            margin: 1em 0 0;
+            display: flex;
+            justify-content: center;
+            font-size: 0.9em;
+            color: #7F8C8D;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            background-color: #2C3E50;
+            color: white;
+            padding: 1.5em 0;
+            margin-top: auto;
+        }
+    </style>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+        const API_BASE = 'http://localhost:3000';
+        const GOOGLE_CLIENT_ID = '704863901613-gbn1clfnt1rh9in70vpcaa0ooq40orjg.apps.googleusercontent.com';
+
+        const $ = (id) => document.getElementById(id);
+
+        function showMessage(text, type = 'error') {
+            const box = $('auth-message');
+            box.textContent = text;
+            box.className = 'auth-message ' + type;
+            box.style.display = text ? 'block' : 'none';
+        }
+
+        function showForm(type) {
+            showMessage('');
+            $('auth-option').style.display = 'none';
+            $('auth-form').style.display = 'block';
+            $('login-fields').style.display = type === 'login' ? 'block' : 'none';
+            $('signup-fields').style.display = type === 'login' ? 'none' : 'block';
+            $('auth-form-title').textContent = type === 'login' ? 'Login' : 'Sign Up';
+        }
+
+        function showOptions() {
+            showMessage('');
+            $('auth-form').style.display = 'none';
+            $('auth-option').style.display = 'block';
+        }
+
+        function saveSession(username, email) {
+            try {
+                localStorage.setItem('username', username);
+                localStorage.setItem('email', email);
+            } catch (e) {
+                console.warn('Could not save session:', e);
+            }
+        }
+
+        // One place for all server calls, with network-error handling
+        async function sendRequest(path, method, body) {
+            try {
+                const response = await fetch(API_BASE + path, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                let data = {};
+                try { data = await response.json(); } catch (e) { /* non-JSON response */ }
+                return { ok: response.ok, data };
+            } catch (err) {
+                console.error(err);
+                return { ok: false, data: { message: 'Cannot reach the server. Make sure it is running on ' + API_BASE } };
+            }
+        }
+
+        async function registerUser(event) {
+            event.preventDefault();
+            const form = event.target;
+            const button = form.querySelector('button[type="submit"]');
+
+            // Read values from THIS form (the old code grabbed the hidden login form's fields)
+            const email = form.elements['email'].value.trim();
+            const username = form.elements['username'].value.trim();
+            const password = form.elements['password'].value;
+
+            button.disabled = true;
+            const { ok, data } = await sendRequest('/signup', 'POST', { email, username, password });
+            button.disabled = false;
+
+            if (!ok) {
+                showMessage(data.message || 'Sign up failed. Please try again.');
+                return;
+            }
+            showMessage(data.message || 'Account created!', 'success');
+            saveSession(username, email);
+            window.location.href = 'profile.html';
+        }
+
+        async function loginUser(event) {
+            event.preventDefault();
+            const form = event.target;
+            const button = form.querySelector('button[type="submit"]');
+
+            const username = form.elements['username'].value.trim();
+            const password = form.elements['password'].value;
+
+            button.disabled = true;
+            const { ok, data } = await sendRequest('/login', 'POST', { username, password });
+            button.disabled = false;
+
+            if (!ok) {
+                showMessage(data.message || 'Login failed. Check your username and password.');
+                return;
+            }
+            saveSession(data.username || username, data.email || '');
+            window.location.href = 'profile.html';
+        }
+
+        // Proper base64url + UTF-8 decoding of the Google ID token payload
+        function decodeJwtPayload(token) {
+            const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            const json = decodeURIComponent(
+                atob(base64)
+                    .split('')
+                    .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                    .join('')
+            );
+            return JSON.parse(json);
+        }
+
+        async function handleCredentialResponse(response) {
+            let payload;
+            try {
+                payload = decodeJwtPayload(response.credential);
+            } catch (e) {
+                showMessage('Google sign-in returned an invalid response.');
+                return;
+            }
+
+            // Send the token too, so the server can VERIFY it instead of trusting email/name
+            const { ok, data } = await sendRequest('/google-login', 'POST', {
+                credential: response.credential,
+                email: payload.email,
+                name: payload.name
+            });
+
+            if (!ok) {
+                showMessage(data.message || 'Error during Google login.');
+                return;
+            }
+            saveSession(payload.name, payload.email);
+            window.location.href = 'profile.html';
+        }
+
+        window.addEventListener('load', function () {
+            $('year').textContent = new Date().getFullYear();
+
+            if (window.google && google.accounts && google.accounts.id) {
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleCredentialResponse
+                });
+                google.accounts.id.renderButton($('google-signin'), { theme: 'outline', size: 'large' });
+            } else {
+                $('google-signin').textContent = 'Google Sign-In is unavailable right now.';
+            }
+        });
+    </script>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <h1>Cricinfo</h1>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="series.html">Series</a></li>
+                <li><a href="teams.html">Teams</a></li>
+                <li><a href="rankings.html">Rankings</a></li>
+                <li><a href="profile.html">Profile</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <h2>Login or Sign Up</h2>
+        <p>Access your Cricinfo account or create a new one.</p>
+    </section>
+
+    <section class="auth-container">
+        <div id="auth-message" class="auth-message" role="alert"></div>
+
+        <div id="auth-option" class="auth-option">
+            <h3>Welcome!</h3>
+            <p>Please choose an option below:</p>
+            <button type="button" onclick="showForm('login')">Login</button>
+            <p>or</p>
+            <button type="button" onclick="showForm('signup')">Sign Up</button>
+            <div id="google-signin" class="google-signin"></div>
+        </div>
+
+        <div id="auth-form" class="auth-form">
+            <h3 id="auth-form-title"></h3>
+
+            <div id="login-fields" style="display: none;">
+                <form onsubmit="loginUser(event)">
+                    <input type="text" name="username" placeholder="Username" autocomplete="username" aria-label="Username" required>
+                    <input type="password" name="password" placeholder="Password" autocomplete="current-password" aria-label="Password" required>
+                    <button type="submit" class="primary">Login</button>
+                </form>
+            </div>
+
+            <div id="signup-fields" style="display: none;">
+                <form onsubmit="registerUser(event)">
+                    <input type="email" name="email" placeholder="Email" autocomplete="email" aria-label="Email" required>
+                    <input type="text" name="username" placeholder="Username" autocomplete="username" aria-label="Username" required>
+                    <input type="password" name="password" placeholder="Password" autocomplete="new-password" aria-label="Password" minlength="6" required>
+                    <button type="submit" class="primary">Sign Up</button>
+                </form>
+            </div>
+
+            <button type="button" class="link-btn" onclick="showOptions()">Back</button>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; <span id="year">2024</span> Cricinfo. All Rights Reserved.</p>
+    </footer>
+</body>
+</html>
